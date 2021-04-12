@@ -11,9 +11,16 @@ import numpy as np
 import tushare as ts
 import pandas as pd
 from scipy.optimize import minimize, basinhopping
+import datetime
+from dateutil.relativedelta import relativedelta
 
 
-def data_process(tickers: list, start_day=None, end_day=None):
+def data_process(tickers: list, date, start_day=None, end_day=None):
+	if end_day is None:
+		end_day = (datetime.datetime.strptime(date, '%Y-%m-%d') - relativedelta(days=1)).strftime('%Y-%m-%d')
+	if start_day is None:
+		(datetime.datetime.strptime(end_day, '%Y-%m-%d') - relativedelta(years=1)).strftime('%Y-%m-%d')
+
 	returns = pd.DataFrame()
 	dates = []
 	for ticker in tickers:
@@ -29,10 +36,11 @@ def data_process(tickers: list, start_day=None, end_day=None):
 			except ValueError:
 				print('The length of prices we can get for ' + ticker +
 					  ' is different from that for previous stocks(s).')
+	print(returns)
 	return returns
 
 
-def MinVariance(returns=None):
+def MinVariance(returns):
 	"""
 	风险最小化
 	"""
@@ -78,13 +86,18 @@ def MeanVariance(returns, expected_returns: pd.Series = None, window=252, risk_a
 	else:
 		rho = np.array(expected_returns)
 
-	def func(omega):
+	def fun(omega):
 		return - rho.T.dot(omega) + risk_aversion_coefficient * omega.T.dot(Sigma).dot(omega)
 
-	initial_guess = np.ones(returns.shape()[1]) / returns.shape()[1]
-	opt_omega = basinhopping(func, initial_guess, stepsize=5).x
+	initial_guess = np.ones(returns.shape[1]) / returns.shape[1]
 
-	pass
+	bounds = []
+	[bounds.append((0, 1)) for i in range(returns.shape[1])]
+	cons = ({'type': 'eq', 'fun': lambda x:  sum(x) - 1})
+
+	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
+
+	return pd.DataFrame(opt_omega, index=returns.columns, columns=['Suggested weight'])
 
 
 def ActiveMeanVariance(expected_active_returns: pd.Series = None, window=252, risk_aversion_coefficient=0):
@@ -114,7 +127,14 @@ def RiskParity(returns):
 				s += ((omega[i] * intermediate[i] - omega[j] * intermediate[j]) / denominator) ** 2
 		return s
 
-	pass
+	initial_guess = np.ones(returns.shape()[1]) / returns.shape()[1]
+	bounds = []
+	[bounds.append((0, 1)) for i in range(returns.shape[1])]
+	cons = ({'type': 'eq', 'fun': lambda x:  sum(x) - 1})
+
+	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
+
+	return opt_omega
 
 
 def MinTrackingError(returns, baseline_weight):
@@ -128,7 +148,14 @@ def MinTrackingError(returns, baseline_weight):
 	def fun(omega):
 		return np.sqrt((omega - baseline_weight).T.dot(Sigma).dot((omega - baseline_weight)))
 
-	pass
+	initial_guess = np.ones(returns.shape()[1]) / returns.shape()[1]
+	bounds = []
+	[bounds.append((0, 1)) for i in range(returns.shape[1])]
+	cons = ({'type': 'eq', 'fun': lambda x:  sum(x) - 1})
+
+	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
+
+	return opt_omega
 
 
 def MaxInformationRatio(returns, expected_active_returns: pd.Series = None, baseline_weight=None, window=252):
@@ -145,10 +172,17 @@ def MaxInformationRatio(returns, expected_active_returns: pd.Series = None, base
 	Sigma = returns.cov()
 
 	def fun(omega):
-		return (omega - baseline_weight).T.dot(expected_active_returns)/np.sqrt(
+		return (omega - baseline_weight).T.dot(expected_active_returns) / np.sqrt(
 			(omega - baseline_weight).T.dot(Sigma).dot((omega - baseline_weight)))
 
-	pass
+	initial_guess = np.ones(returns.shape()[1]) / returns.shape()[1]
+	bounds = []
+	[bounds.append((0, 1)) for i in range(returns.shape[1])]
+	cons = ({'type': 'eq', 'fun': lambda x:  sum(x) - 1})
+
+	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
+
+	return opt_omega
 
 
 def MaxSharpeRatio(returns, expected_returns: pd.Series = None, window=252):
@@ -166,8 +200,14 @@ def MaxSharpeRatio(returns, expected_returns: pd.Series = None, window=252):
 	def fun(omega):
 		return omega.T.dot(expected_returns) / np.sqrt(omega.T.dot(Sigma).dot(omega))
 
+	initial_guess = np.ones(returns.shape()[1]) / returns.shape()[1]
+	bounds = []
+	[bounds.append((0, 1)) for i in range(returns.shape[1])]
+	cons = ({'type': 'eq', 'fun': lambda x:  sum(x) - 1})
 
-	pass
+	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
+
+	return opt_omega
 
 
 def MaxIndicator(factor):

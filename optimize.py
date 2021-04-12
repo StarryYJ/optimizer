@@ -6,7 +6,7 @@ def to_date(date):
 	pass
 
 
-def portfolio_optimize(order_book_ids, date, objective=MinVariance(), boundaries: dict = None, cons=None,
+def portfolio_optimize(order_book_ids, date, objective=MinVariance, boundaries: dict = None, cons=None,
 					   benchmark=None, cov_model=None, factor_risk_aversion=1, specific_risk_aversion=1):
 	"""
 	:param order_book_ids: 候选合约
@@ -23,17 +23,29 @@ def portfolio_optimize(order_book_ids, date, objective=MinVariance(), boundaries
 	:return: pd.Series 组合最优化权重
 	"""
 
+	returns = data_process(order_book_ids, date)
+
 	if boundaries is not None:
 		pass
 
-
 	if cons is not None:
 		pass
-
 
 	if cov_model is None:
 		pass
 	else:
 		pass
 
+	if (objective is None) or (objective is MinVariance):
+		return MinVariance(returns=returns)
+	elif objective is MeanVariance:
+		return MeanVariance(returns=returns)
+
 	pass
+
+
+if __name__ == "__main__":
+	pool = ['600969', '300649', '603037', '002111']
+	target_date = '2021-04-11'
+	portfolio_optimize(pool, target_date, objective=MeanVariance)
+
