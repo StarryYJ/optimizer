@@ -97,46 +97,105 @@ def ActiveMeanVariance(expected_active_returns: pd.Series = None, window=252, ri
 	pass
 
 
-def RiskParity():
+def RiskParity(returns):
 	"""
 	风险平价
+	min sum( ((omega[i] * Sigma.dot(omega)[i] - omega[j] * Sigma.dot(omega)[j])/np.sqrt(omega.T.dot(Sigma).dot(omega))) ** 2 )
 	"""
+
+	Sigma = returns.cov()
+
+	def fun(omega):
+		intermediate = Sigma.dot(omega)
+		denominator = np.sqrt(omega.T.dot(Sigma).dot(omega))
+		s = 0
+		for i in range(len(omega)):
+			for j in range(len(omega)):
+				s += ((omega[i] * intermediate[i] - omega[j] * intermediate[j]) / denominator) ** 2
+		return s
+
 	pass
 
 
-def MinTrackingError():
+def MinTrackingError(returns, baseline_weight):
 	"""
 	最小追踪误差
+	min np.sqrt((omega - baseline_weight).T.dot(Sigma).dot((omega - baseline_weight)))
 	"""
+
+	Sigma = returns.cov()
+
+	def fun(omega):
+		return np.sqrt((omega - baseline_weight).T.dot(Sigma).dot((omega - baseline_weight)))
+
 	pass
 
 
-def MaxInformationRatio(expected_active_returns: pd.Series = None, window=252):
+def MaxInformationRatio(returns, expected_active_returns: pd.Series = None, baseline_weight=None, window=252):
 	"""
 	最大信息比率
+	min (weight_p-weight_b).T × (expected_active_returns) / sqrt( (weight_p-weight_b).T × Sigma × (weight_p-weight_b) )
+
+	:param returns: output of data_process function
+	:param baseline_weight: 基准组合权重向量
 	:param expected_active_returns: 预期主动收益率。不传入时，使用历史收益率估计。
 	:param window: 使用历史收益率估计预期主动收益时，取历史收益的长度，默认为252，即一年
 	"""
+
+	Sigma = returns.cov()
+
+	def fun(omega):
+		return (omega - baseline_weight).T.dot(expected_active_returns)/np.sqrt(
+			(omega - baseline_weight).T.dot(Sigma).dot((omega - baseline_weight)))
+
 	pass
 
 
-def MaxSharpeRatio(expected_returns: pd.Series = None, window=252):
+def MaxSharpeRatio(returns, expected_returns: pd.Series = None, window=252):
 	"""
 	最大化夏普比率
+	max weight.T × expected_returns / sqrt( weight.T × Sigma × weight )
+
+	:param returns: output of data_process function
 	:param expected_returns: 预期收益率。当不传入时，默认使用历史收益率估计。
 	:param window: 使用历史收益率估计预期主动收益时，取历史收益的长度，默认为252，即一年
 	"""
+
+	Sigma = returns.cov()
+
+	def fun(omega):
+		return omega.T.dot(expected_returns) / np.sqrt(omega.T.dot(Sigma).dot(omega))
+
+
 	pass
 
 
-def MaxIndicator():
+def MaxIndicator(factor):
+	"""
+	指标最大化
+	max omega.T.dot(factor)
+
+	:param factor: 用户输入的个股指标值
+	:return:
+	"""
+
+	def fun(omega):
+		return omega.T.dot(factor)
+
 	pass
 
 
 def MinStyleDeviation(target_style: pd.Series, relative: bool, priority: pd.Series):
 	"""
+	风格偏离最小化
+	min (omega.T.(个股因子暴露度) - 目标因子暴露度) ** 2
+
 	:param target_style: 目标风格
 	:param relative: 是否为相对于基准
 	:param priority: 优先级，可以为每个风格指定一个0-9的优先级，9为最高优先级，0为最低优先级；未指定的风格默认优先级为5
 	"""
+
+	def fun(omega):
+		return (omega.T.dot(target_style) - target_style) ** 2
+
 	pass

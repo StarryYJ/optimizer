@@ -1,4 +1,5 @@
 from objective import *
+import datetime
 
 
 def to_date(date):
@@ -21,4 +22,18 @@ def portfolio_optimize(order_book_ids, date, objective=MinVariance(), boundaries
 	:param specific_risk_aversion: 特异风险厌恶系数，默认为1
 	:return: pd.Series 组合最优化权重
 	"""
+
+	if boundaries is not None:
+		pass
+
+
+	if cons is not None:
+		pass
+
+
+	if cov_model is None:
+		pass
+	else:
+		pass
+
 	pass
