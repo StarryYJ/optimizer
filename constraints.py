@@ -1,16 +1,28 @@
 import pandas as pd
+from optimize import *
 
 
+# class Constraints:
+# 	def __init__(self, returns):
+# 		self.returns = returns
 
-def TrackingErrorLimit(upper_limit, hard):
-	"""
-	追踪误差约束。基准为优化时指定的基准。
-	:param upper_limit: 追踪误差上界
-	:param hard: 软约束/硬约束
-	"""
-	constraints = {}
 
-	pass
+class TrackingErrorLimit:
+
+	def __init__(self, upper_limit, hard):
+		"""
+		追踪误差约束。基准为优化时指定的基准。
+
+		:param upper_limit: 追踪误差上界
+		:param hard: 软约束/硬约束
+		"""
+		self.upper_limit = upper_limit
+		self.hard = hard
+		self.constraint = {'type': 'eq', 'fun': lambda x: sum(x) - 1}
+
+	def goal(self, omega):
+
+		return
 
 
 def TurnoverLimit(current_holding: pd.Series, upper_limit, hard):
@@ -71,6 +83,8 @@ def StyleConstraint(styles, lower_limit, upper_limit, relative, hard):
 	:param relative: 是否为相对于基准
 	:param hard: 软约束/硬约束
 	"""
+
+
 	pass
 
 

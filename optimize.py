@@ -1,4 +1,11 @@
 from objective import *
+import pandas as pd
+
+bench = None
+returns = pd.DataFrame()
+constraints, constraints_hard = [{'type': 'eq', 'fun': lambda wei: sum(wei) - 1}], []
+bounds = []
+initial_guess = None
 
 
 def to_date(date):
@@ -21,10 +28,11 @@ def portfolio_optimize(order_book_ids, date, objective=MinVariance, boundaries: 
 	:param specific_risk_aversion: 特异风险厌恶系数，默认为1
 	:return: pd.Series 组合最优化权重
 	"""
-
+	global bench, returns, constraints, constraints_hard, bounds, initial_guess
+	bench = benchmark
 	returns = data_process(order_book_ids, date)
+	initial_guess = np.ones(returns.shape[1]) / returns.shape[1]
 
-	bounds = []
 	if boundaries is not None:
 		for i in range(len(order_book_ids)):
 			if order_book_ids[i] in boundaries.keys():
@@ -37,7 +45,6 @@ def portfolio_optimize(order_book_ids, date, objective=MinVariance, boundaries: 
 		[bounds.append((0, 1)) for i in range(returns.shape[1])]
 		cons = ({'type': 'eq', 'fun': lambda x: sum(x) - 1})
 
-	constraints, constraints_hard = dict(), dict()
 	if cons is not None:
 		for i in range(len(cons)):
 			temp = cons[i]
@@ -54,9 +61,9 @@ def portfolio_optimize(order_book_ids, date, objective=MinVariance, boundaries: 
 		pass
 
 	if objective is MinVariance:
-		return MinVariance(returns=returns)
+		return MinVariance()
 	elif objective is MeanVariance:
-		return MeanVariance(returns=returns)
+		return MeanVariance()
 	else:
 		print('Improper objective.')
 		exit(1)
@@ -65,6 +72,27 @@ def portfolio_optimize(order_book_ids, date, objective=MinVariance, boundaries: 
 
 
 if __name__ == "__main__":
+
 	pool = ['600969', '300649', '603037', '002111']
 	target_date = '2021-04-11'
 	portfolio_optimize(pool, target_date, objective=MeanVariance)
+
+	"""
+	Sample:
+	
+	#优化日期
+	date = '2019-02-28'
+	#候选合约
+	pool =  index_components('000906.XSHG',date)
+
+	#对组合中所有个股头寸添加相同的约束0~5%
+	bounds = {'*': (0, 0.05)}
+	#优化函数，风格偏离最小化，优化组合beta风格因子暴露度相对于基准组合高出1个标准差
+	objective = MinStyleDeviation({'size': 0, 'beta': 1, 'book_to_price': 0, 'earnings_yield': 0, 'growth': 0, 'leverage': 0, 'liquidity': 0, 'momentum': 0, 'non_linear_size': 0, 'residual_volatility': 0}, relative=True)
+	#约束条件，对所有风格因子添加基准中性约束，允许偏离±0.3个标准差
+	cons = [
+			WildcardStyleConstraint(lower_limit=-0.3, upper_limit=0.3, relative=True, hard=True)
+		]
+
+	portfolio_optimize(pool, date, bnds=bounds, cons=cons, benchmark='000300.XSHG',objective = objective)
+	"""

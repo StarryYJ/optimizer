@@ -13,6 +13,7 @@ import pandas as pd
 from scipy.optimize import minimize  # , basinhopping
 import datetime
 from dateutil.relativedelta import relativedelta
+from optimize import *
 
 
 def data_process(tickers: list, date, start_day=None, end_day=None):
@@ -21,7 +22,7 @@ def data_process(tickers: list, date, start_day=None, end_day=None):
 	if start_day is None:
 		(datetime.datetime.strptime(end_day, '%Y-%m-%d') - relativedelta(years=1)).strftime('%Y-%m-%d')
 
-	returns = pd.DataFrame()
+	r = pd.DataFrame()
 	dates = []
 	for ticker in tickers:
 		try:
@@ -32,15 +33,14 @@ def data_process(tickers: list, date, start_day=None, end_day=None):
 			print('Fail to find prices of stock ' + ticker)
 		else:
 			try:
-				returns[ticker] = prices[1:] / prices[:-1] - 1
+				r[ticker] = prices[1:] / prices[:-1] - 1
 			except ValueError:
 				print('The length of prices we can get for ' + ticker +
 					  ' is different from that for previous stocks(s).')
-	print(returns)
-	return returns
+	return r
 
 
-def MinVariance(returns):
+def MinVariance():
 	"""
 	风险最小化
 	"""
@@ -69,12 +69,11 @@ def MinActiveVariance():
 	pass
 
 
-def MeanVariance(returns, expected_returns: pd.Series = None, window=252, risk_aversion_coefficient=0):
+def MeanVariance(expected_returns: pd.Series = None, window=252, risk_aversion_coefficient=0):
 	"""
 	收益/风险优化
 	max mu.T.dot(omega) - lambda * omega.T.dot(Sigma).dot(omega), where lambda stands for risk aversion coefficient
 
-	:param returns: pd.DataFrame, returns of stocks
 	:param expected_returns: (None | pd.Series) – 预期收益率。当不传入时，默认使用历史收益率估计。
 	:param window: 使用历史收益率估计预期主动收益时，取历史收益率的长度，默认为252，即一年
 	:param risk_aversion_coefficient: 风险厌恶系数
@@ -86,16 +85,10 @@ def MeanVariance(returns, expected_returns: pd.Series = None, window=252, risk_a
 	else:
 		rho = np.array(expected_returns.fillna(0))
 
-	def fun(omega):
+	def goal(omega):
 		return - rho.T.dot(omega) + risk_aversion_coefficient * omega.T.dot(Sigma).dot(omega)
 
-	initial_guess = np.ones(returns.shape[1]) / returns.shape[1]
-
-	bounds = []
-	[bounds.append((0, 1)) for i in range(returns.shape[1])]
-	cons = ({'type': 'eq', 'fun': lambda x: sum(x) - 1})
-
-	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
+	opt_omega = minimize(goal, initial_guess, bounds=bounds, constraints=constraints).x
 
 	return pd.DataFrame(opt_omega, index=returns.columns, columns=['Suggested weight'])
 
@@ -110,7 +103,7 @@ def ActiveMeanVariance(expected_active_returns: pd.Series = None, window=252, ri
 	pass
 
 
-def RiskParity(returns):
+def RiskParity():
 	"""
 	风险平价
 	min sum( ((omega[i] * Sigma.dot(omega)[i] - omega[j] * Sigma.dot(omega)[j])/np.sqrt(omega.T.dot(Sigma).dot(omega))) ** 2 )
@@ -118,7 +111,7 @@ def RiskParity(returns):
 
 	Sigma = returns.cov()
 
-	def fun(omega):
+	def goal(omega):
 		intermediate = Sigma.dot(omega)
 		denominator = np.sqrt(omega.T.dot(Sigma).dot(omega))
 		s = 0
@@ -127,17 +120,12 @@ def RiskParity(returns):
 				s += ((omega[i] * intermediate[i] - omega[j] * intermediate[j]) / denominator) ** 2
 		return s
 
-	initial_guess = np.ones(returns.shape()[1]) / returns.shape()[1]
-	bounds = []
-	[bounds.append((0, 1)) for i in range(returns.shape[1])]
-	cons = ({'type': 'eq', 'fun': lambda x: sum(x) - 1})
-
-	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
+	opt_omega = minimize(goal, initial_guess, bounds=bounds, constraints=constraints).x
 
 	return opt_omega
 
 
-def MinTrackingError(returns, baseline_weight):
+def MinTrackingError(baseline_weight):
 	"""
 	最小追踪误差
 	min np.sqrt((omega - baseline_weight).T.dot(Sigma).dot((omega - baseline_weight)))
@@ -145,25 +133,19 @@ def MinTrackingError(returns, baseline_weight):
 
 	Sigma = returns.cov()
 
-	def fun(omega):
+	def goal(omega):
 		return np.sqrt((omega - baseline_weight).T.dot(Sigma).dot((omega - baseline_weight)))
 
-	initial_guess = np.ones(returns.shape()[1]) / returns.shape()[1]
-	bounds = []
-	[bounds.append((0, 1)) for i in range(returns.shape[1])]
-	cons = ({'type': 'eq', 'fun': lambda x: sum(x) - 1})
-
-	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
+	opt_omega = minimize(goal, initial_guess, bounds=bounds, constraints=constraints).x
 
 	return opt_omega
 
 
-def MaxInformationRatio(returns, expected_active_returns: pd.Series = None, baseline_weight=None, window=252):
+def MaxInformationRatio( expected_active_returns: pd.Series = None, baseline_weight=None, window=252):
 	"""
 	最大信息比率
 	min (weight_p-weight_b).T × (expected_active_returns) / sqrt( (weight_p-weight_b).T × Sigma × (weight_p-weight_b) )
 
-	:param returns: output of data_process function
 	:param baseline_weight: 基准组合权重向量
 	:param expected_active_returns: 预期主动收益率。不传入时，使用历史收益率估计。
 	:param window: 使用历史收益率估计预期主动收益时，取历史收益的长度，默认为252，即一年
@@ -171,41 +153,32 @@ def MaxInformationRatio(returns, expected_active_returns: pd.Series = None, base
 
 	Sigma = returns.cov()
 
-	def fun(omega):
+	def goal(omega):
 		return (omega - baseline_weight).T.dot(expected_active_returns) / np.sqrt(
 			(omega - baseline_weight).T.dot(Sigma).dot((omega - baseline_weight)))
 
-	initial_guess = np.ones(returns.shape()[1]) / returns.shape()[1]
-	bounds = []
-	[bounds.append((0, 1)) for i in range(returns.shape[1])]
-	cons = ({'type': 'eq', 'fun': lambda x: sum(x) - 1})
 
-	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
+	opt_omega = minimize(goal, initial_guess, bounds=bounds, constraints=constraints).x
 
 	return opt_omega
 
 
-def MaxSharpeRatio(returns, expected_returns: pd.Series = None, window=252):
+def MaxSharpeRatio(expected_returns: pd.Series = None, window=252):
 	"""
 	最大化夏普比率
 	max weight.T × expected_returns / sqrt( weight.T × Sigma × weight )
 
-	:param returns: output of data_process function
 	:param expected_returns: 预期收益率。当不传入时，默认使用历史收益率估计。
 	:param window: 使用历史收益率估计预期主动收益时，取历史收益的长度，默认为252，即一年
 	"""
 
 	Sigma = returns.cov()
 
-	def fun(omega):
+	def goal(omega):
 		return omega.T.dot(expected_returns) / np.sqrt(omega.T.dot(Sigma).dot(omega))
 
-	initial_guess = np.ones(returns.shape()[1]) / returns.shape()[1]
-	bounds = []
-	[bounds.append((0, 1)) for i in range(returns.shape[1])]
-	cons = ({'type': 'eq', 'fun': lambda x: sum(x) - 1})
 
-	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
+	opt_omega = minimize(goal, initial_guess, bounds=bounds, constraints=constraints).x
 
 	return opt_omega
 
@@ -219,7 +192,7 @@ def MaxIndicator(factor):
 	:return:
 	"""
 
-	def fun(omega):
+	def goal(omega):
 		return omega.T.dot(factor)
 
 	pass
@@ -239,8 +212,10 @@ def MinStyleDeviation(target_style: pd.Series, relative: bool, priority: pd.Seri
 	if relative:
 		target_style += base_style
 
-	def fun(omega):
+	def goal(omega):
 		return (omega.T.dot(target_style) - target_style) ** 2
+
+	opt_omega = minimize(goal, initial_guess, bounds=bounds, constraints=constraints).x
 
 	pass
 
