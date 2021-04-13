@@ -10,7 +10,7 @@
 import numpy as np
 import tushare as ts
 import pandas as pd
-from scipy.optimize import minimize, basinhopping
+from scipy.optimize import minimize  # , basinhopping
 import datetime
 from dateutil.relativedelta import relativedelta
 
@@ -84,7 +84,7 @@ def MeanVariance(returns, expected_returns: pd.Series = None, window=252, risk_a
 	if expected_returns is None:
 		rho = np.mean(returns, axis=0)
 	else:
-		rho = np.array(expected_returns)
+		rho = np.array(expected_returns.fillna(0))
 
 	def fun(omega):
 		return - rho.T.dot(omega) + risk_aversion_coefficient * omega.T.dot(Sigma).dot(omega)
@@ -93,7 +93,7 @@ def MeanVariance(returns, expected_returns: pd.Series = None, window=252, risk_a
 
 	bounds = []
 	[bounds.append((0, 1)) for i in range(returns.shape[1])]
-	cons = ({'type': 'eq', 'fun': lambda x:  sum(x) - 1})
+	cons = ({'type': 'eq', 'fun': lambda x: sum(x) - 1})
 
 	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
 
@@ -130,7 +130,7 @@ def RiskParity(returns):
 	initial_guess = np.ones(returns.shape()[1]) / returns.shape()[1]
 	bounds = []
 	[bounds.append((0, 1)) for i in range(returns.shape[1])]
-	cons = ({'type': 'eq', 'fun': lambda x:  sum(x) - 1})
+	cons = ({'type': 'eq', 'fun': lambda x: sum(x) - 1})
 
 	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
 
@@ -151,7 +151,7 @@ def MinTrackingError(returns, baseline_weight):
 	initial_guess = np.ones(returns.shape()[1]) / returns.shape()[1]
 	bounds = []
 	[bounds.append((0, 1)) for i in range(returns.shape[1])]
-	cons = ({'type': 'eq', 'fun': lambda x:  sum(x) - 1})
+	cons = ({'type': 'eq', 'fun': lambda x: sum(x) - 1})
 
 	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
 
@@ -178,7 +178,7 @@ def MaxInformationRatio(returns, expected_active_returns: pd.Series = None, base
 	initial_guess = np.ones(returns.shape()[1]) / returns.shape()[1]
 	bounds = []
 	[bounds.append((0, 1)) for i in range(returns.shape[1])]
-	cons = ({'type': 'eq', 'fun': lambda x:  sum(x) - 1})
+	cons = ({'type': 'eq', 'fun': lambda x: sum(x) - 1})
 
 	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
 
@@ -203,7 +203,7 @@ def MaxSharpeRatio(returns, expected_returns: pd.Series = None, window=252):
 	initial_guess = np.ones(returns.shape()[1]) / returns.shape()[1]
 	bounds = []
 	[bounds.append((0, 1)) for i in range(returns.shape[1])]
-	cons = ({'type': 'eq', 'fun': lambda x:  sum(x) - 1})
+	cons = ({'type': 'eq', 'fun': lambda x: sum(x) - 1})
 
 	opt_omega = minimize(fun, initial_guess, bounds=bounds, constraints=cons).x
 
@@ -234,8 +234,27 @@ def MinStyleDeviation(target_style: pd.Series, relative: bool, priority: pd.Seri
 	:param relative: 是否为相对于基准
 	:param priority: 优先级，可以为每个风格指定一个0-9的优先级，9为最高优先级，0为最低优先级；未指定的风格默认优先级为5
 	"""
+	base_style = 1
+
+	if relative:
+		target_style += base_style
 
 	def fun(omega):
 		return (omega.T.dot(target_style) - target_style) ** 2
 
 	pass
+
+
+"""
+风格因子字段 					解释
+beta 						个股/投资组合收益对基准组合价格变动的敏感度
+momentum 					股票收益变化的总体趋势特征
+size 						上市公司的市值规模
+earnings_yield 				上市公司的营收能力
+residual_volatility 		个股残余收益的波动程度
+growth 						上市公司的营收增长情况
+book_to_price 				上市公司的股东权益-市值比，反映其估值水平
+leverage 					上市公司企业负债占资产比例，反映企业的经营杠杆率
+liquidity 					股票换手率，反映个股交易的活跃程度
+non_linear_size 			反映中等市值股票和大/小市值股票的表现差异
+"""

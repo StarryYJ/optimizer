@@ -1,12 +1,11 @@
 from objective import *
-import datetime
 
 
 def to_date(date):
-	pass
+	return datetime.datetime.strptime(date, '%Y-%m-%d')
 
 
-def portfolio_optimize(order_book_ids, date, objective=MinVariance, boundaries: dict = None, cons=None,
+def portfolio_optimize(order_book_ids, date, objective=MinVariance, boundaries: dict = None, cons: list = None,
 					   benchmark=None, cov_model=None, factor_risk_aversion=1, specific_risk_aversion=1):
 	"""
 	:param order_book_ids: 候选合约
@@ -25,21 +24,42 @@ def portfolio_optimize(order_book_ids, date, objective=MinVariance, boundaries: 
 
 	returns = data_process(order_book_ids, date)
 
+	bounds = []
 	if boundaries is not None:
-		pass
+		for i in range(len(order_book_ids)):
+			if order_book_ids[i] in boundaries.keys():
+				bounds.append(boundaries[order_book_ids[i]])
+			elif '*' in boundaries.keys():
+				bounds.append(boundaries[order_book_ids['*']])
+			else:
+				bounds.append((0, 1))
+	else:
+		[bounds.append((0, 1)) for i in range(returns.shape[1])]
+		cons = ({'type': 'eq', 'fun': lambda x: sum(x) - 1})
 
+	constraints, constraints_hard = dict(), dict()
 	if cons is not None:
-		pass
+		for i in range(len(cons)):
+			temp = cons[i]
+			if len(temp) == 1:
+				constraints = dict(constraints, **temp)
+			else:
+				constraints = dict(constraints, **(temp[0]))
+				constraints_hard = dict(constraints_hard, **(temp[1]))
+			pass
 
 	if cov_model is None:
 		pass
 	else:
 		pass
 
-	if (objective is None) or (objective is MinVariance):
+	if objective is MinVariance:
 		return MinVariance(returns=returns)
 	elif objective is MeanVariance:
 		return MeanVariance(returns=returns)
+	else:
+		print('Improper objective.')
+		exit(1)
 
 	pass
 
@@ -48,4 +68,3 @@ if __name__ == "__main__":
 	pool = ['600969', '300649', '603037', '002111']
 	target_date = '2021-04-11'
 	portfolio_optimize(pool, target_date, objective=MeanVariance)
-

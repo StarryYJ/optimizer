@@ -1,3 +1,4 @@
+import pandas as pd
 
 
 
@@ -7,16 +8,21 @@ def TrackingErrorLimit(upper_limit, hard):
 	:param upper_limit: 追踪误差上界
 	:param hard: 软约束/硬约束
 	"""
+	constraints = {}
+
 	pass
 
 
-def TurnoverLimit(current_holding, upper_limit, hard):
+def TurnoverLimit(current_holding: pd.Series, upper_limit, hard):
 	"""
 	换手率约束
+		Bilateral_turnover_rate = 0.5 * sum(omega[i] - current_holding[i])
+
 	:param current_holding: 当前持仓
 	:param upper_limit: 追踪误差上界
 	:param hard: 软约束/硬约束
 	"""
+
 	pass
 
 
