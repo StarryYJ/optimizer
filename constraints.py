@@ -1,5 +1,5 @@
 import pandas as pd
-from optimize import *
+import objective
 
 
 # class Constraints:
@@ -109,3 +109,12 @@ def WildcardStyleConstraint(exclude=None, lower_limit=None, upper_limit=None, re
 	:param relative: 是否为相对于基准
 	:param hard: 软约束/硬约束
 	"""
+
+
+def reverse_bounds(b):
+	rb = []
+	for i in b:
+		rb.append((-i[1], -i[0]))
+	return rb
+
+

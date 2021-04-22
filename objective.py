@@ -13,17 +13,47 @@ import pandas as pd
 from scipy.optimize import minimize  # , basinhopping
 import datetime
 from dateutil.relativedelta import relativedelta
-from optimize import *
+import optimize as opt
+# from constraints import *
+import constraints
+import math
+
+initial_guess = np.ones(opt.returns.shape[1]) / opt.returns.shape[1]
+
+
+# 0 - XSHE; 6 - XSHG
+
+
+def update_data():
+	from optimize import returns, constraints, constraints_hard, bounds, initial_guess
+	from optimize import max_add_to_1, min_add_to_1
+
+
+def covariance(df):
+	out = pd.DataFrame()
+	for i in range(len(df.columns)):
+		out[i] = np.ones(len(df.columns))
+	for i in range(len(df.columns)):
+		mean_i = np.mean(df.iloc[:, i])
+		tp = 0
+		for k in range(len(df.columns)):
+			mean_k = np.mean(df.iloc[:, k])
+			for m in range(len(df)):
+				tp += (df.iloc[m, i] - mean_i) * (df.iloc[m, k] - mean_k)
+			out.iloc[i, k] = tp / len(df)
+	return out
 
 
 def data_process(tickers: list, date, start_day=None, end_day=None):
+
 	if end_day is None:
 		end_day = (datetime.datetime.strptime(date, '%Y-%m-%d') - relativedelta(days=1)).strftime('%Y-%m-%d')
 	if start_day is None:
-		(datetime.datetime.strptime(end_day, '%Y-%m-%d') - relativedelta(years=1)).strftime('%Y-%m-%d')
+		start_day = (datetime.datetime.strptime(end_day, '%Y-%m-%d') - relativedelta(years=1)).strftime('%Y-%m-%d')
 
 	r = pd.DataFrame()
 	dates = []
+
 	for ticker in tickers:
 		try:
 			close = ts.get_hist_data(ticker, start_day, end_day)['close']
@@ -37,6 +67,7 @@ def data_process(tickers: list, date, start_day=None, end_day=None):
 			except ValueError:
 				print('The length of prices we can get for ' + ticker +
 					  ' is different from that for previous stocks(s).')
+	# r.index = dates[0][1:]
 	return r
 
 
@@ -44,9 +75,9 @@ def MinVariance():
 	"""
 	风险最小化
 	"""
-	Sigma = returns.cov()
+	Sigma = opt.returns.cov()
 	Sigma_inv = np.linalg.inv(Sigma)
-	rho = np.mean(returns, axis=0)
+	rho = np.mean(opt.returns, axis=0)
 	e = np.ones(len(rho))
 
 	A = e.dot(Sigma_inv).dot(rho)
@@ -59,7 +90,9 @@ def MinVariance():
 
 	P_star = g + A / C * h
 
-	return pd.DataFrame(P_star, index=returns.columns, columns=['Suggested weight'])
+	opt.constraints.append({'type': 'eq', 'fun': opt.min_add_to_1})
+
+	return pd.DataFrame(P_star, index=opt.returns.columns, columns=['Suggested weight'])
 
 
 def MinActiveVariance():
@@ -69,7 +102,7 @@ def MinActiveVariance():
 	pass
 
 
-def MeanVariance(expected_returns: pd.Series = None, window=252, risk_aversion_coefficient=0):
+def MeanVariance(expected_returns: pd.Series = None, window=252, risk_aversion_coefficient=1):
 	"""
 	收益/风险优化
 	max mu.T.dot(omega) - lambda * omega.T.dot(Sigma).dot(omega), where lambda stands for risk aversion coefficient
@@ -79,18 +112,27 @@ def MeanVariance(expected_returns: pd.Series = None, window=252, risk_aversion_c
 	:param risk_aversion_coefficient: 风险厌恶系数
 	:return:
 	"""
-	Sigma = returns.cov()
+
+	Sigma = opt.returns.cov()
 	if expected_returns is None:
-		rho = np.mean(returns, axis=0)
+		rho = np.mean(opt.returns, axis=0)
 	else:
 		rho = np.array(expected_returns.fillna(0))
 
 	def goal(omega):
 		return - rho.T.dot(omega) + risk_aversion_coefficient * omega.T.dot(Sigma).dot(omega)
 
-	opt_omega = minimize(goal, initial_guess, bounds=bounds, constraints=constraints).x
 
-	return pd.DataFrame(opt_omega, index=returns.columns, columns=['Suggested weight'])
+	opt.constraints.append({'type': 'eq', 'fun': opt.max_add_to_1})
+	bds = constraints.reverse_bounds(opt.bounds)
+
+	opt_omega = minimize(goal, opt.initial_guess, bounds=bds, constraints=opt.constraints).x
+	opt_omega = opt_omega * (-1)
+
+	return pd.DataFrame(opt_omega, index=opt.returns.columns, columns=['Suggested weight'])
+
+	# x = pd.DataFrame(opt_omega, index=returns.columns, columns=['Suggested weight'])
+	# x.to_csv('test02.csv')
 
 
 def ActiveMeanVariance(expected_active_returns: pd.Series = None, window=252, risk_aversion_coefficient=0):
@@ -109,7 +151,7 @@ def RiskParity():
 	min sum( ((omega[i] * Sigma.dot(omega)[i] - omega[j] * Sigma.dot(omega)[j])/np.sqrt(omega.T.dot(Sigma).dot(omega))) ** 2 )
 	"""
 
-	Sigma = returns.cov()
+	Sigma = opt.returns.cov()
 
 	def goal(omega):
 		intermediate = Sigma.dot(omega)
@@ -120,7 +162,9 @@ def RiskParity():
 				s += ((omega[i] * intermediate[i] - omega[j] * intermediate[j]) / denominator) ** 2
 		return s
 
-	opt_omega = minimize(goal, initial_guess, bounds=bounds, constraints=constraints).x
+	opt.constraints.append({'type': 'eq', 'fun': opt.min_add_to_1})
+
+	opt_omega = minimize(goal, opt.initial_guess, bounds=opt.bounds, constraints=opt.constraints).x
 
 	return opt_omega
 
@@ -131,34 +175,38 @@ def MinTrackingError(baseline_weight):
 	min np.sqrt((omega - baseline_weight).T.dot(Sigma).dot((omega - baseline_weight)))
 	"""
 
-	Sigma = returns.cov()
+	Sigma = opt.returns.cov()
 
 	def goal(omega):
 		return np.sqrt((omega - baseline_weight).T.dot(Sigma).dot((omega - baseline_weight)))
 
-	opt_omega = minimize(goal, initial_guess, bounds=bounds, constraints=constraints).x
+	opt.constraints.append({'type': 'eq', 'fun': opt.min_add_to_1})
+
+	opt_omega = minimize(goal, opt.initial_guess, bounds=opt.bounds, constraints=opt.constraints).x
 
 	return opt_omega
 
 
-def MaxInformationRatio( expected_active_returns: pd.Series = None, baseline_weight=None, window=252):
+def MaxInformationRatio(expected_active_returns: pd.Series = None, baseline_weight=None, window=252):
 	"""
 	最大信息比率
-	min (weight_p-weight_b).T × (expected_active_returns) / sqrt( (weight_p-weight_b).T × Sigma × (weight_p-weight_b) )
+	max (weight_p-weight_b).T × (expected_active_returns) / sqrt( (weight_p-weight_b).T × Sigma × (weight_p-weight_b) )
 
 	:param baseline_weight: 基准组合权重向量
 	:param expected_active_returns: 预期主动收益率。不传入时，使用历史收益率估计。
 	:param window: 使用历史收益率估计预期主动收益时，取历史收益的长度，默认为252，即一年
 	"""
 
-	Sigma = returns.cov()
+	Sigma = opt.returns.cov()
 
 	def goal(omega):
 		return (omega - baseline_weight).T.dot(expected_active_returns) / np.sqrt(
 			(omega - baseline_weight).T.dot(Sigma).dot((omega - baseline_weight)))
 
+	opt.constraints.append({'type': 'eq', 'fun': opt.min_add_to_1})
+	bds = reverse_bounds(opt.bounds)
 
-	opt_omega = minimize(goal, initial_guess, bounds=bounds, constraints=constraints).x
+	opt_omega = minimize(goal, opt.initial_guess, bounds=bds, constraints=opt.constraints).x
 
 	return opt_omega
 
@@ -172,13 +220,15 @@ def MaxSharpeRatio(expected_returns: pd.Series = None, window=252):
 	:param window: 使用历史收益率估计预期主动收益时，取历史收益的长度，默认为252，即一年
 	"""
 
-	Sigma = returns.cov()
+	Sigma = opt.returns.cov()
 
 	def goal(omega):
 		return omega.T.dot(expected_returns) / np.sqrt(omega.T.dot(Sigma).dot(omega))
 
+	opt.constraints.append({'type': 'eq', 'fun': opt.max_add_to_1})
+	bds = reverse_bounds(opt.bounds)
 
-	opt_omega = minimize(goal, initial_guess, bounds=bounds, constraints=constraints).x
+	opt_omega = minimize(goal, opt.initial_guess, bounds=bds, constraints=opt.constraints).x
 
 	return opt_omega
 
@@ -194,6 +244,9 @@ def MaxIndicator(factor):
 
 	def goal(omega):
 		return omega.T.dot(factor)
+
+	bds = reverse_bounds(opt.bounds)
+	opt.constraints.append({'type': 'eq', 'fun': opt.max_add_to_1})
 
 	pass
 
@@ -215,7 +268,9 @@ def MinStyleDeviation(target_style: pd.Series, relative: bool, priority: pd.Seri
 	def goal(omega):
 		return (omega.T.dot(target_style) - target_style) ** 2
 
-	opt_omega = minimize(goal, initial_guess, bounds=bounds, constraints=constraints).x
+	opt.constraints.append({'type': 'eq', 'fun': opt.min_add_to_1})
+
+	opt_omega = minimize(goal, opt.initial_guess, bounds=opt.bounds, constraints=opt.constraints).x
 
 	pass
 
